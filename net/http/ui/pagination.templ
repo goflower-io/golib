@@ -1,0 +1,58 @@
+package ui 
+
+import "github.com/happycrud/golib/net/http"
+import "fmt"
+import "net/url"
+import "strconv"
+
+func ToPath(path string, form url.Values, page int32) string {
+	form.Set("Page", strconv.FormatInt(int64(page), 10))
+	return path + "?" + form.Encode()
+
+}
+
+templ PaginationView(title, path string, form url.Values, p *http.Paginator) {
+	<div id={ fmt.Sprintf("%s_list_page", title) } class="flex flex-col">
+		<div id={ fmt.Sprintf("%s_list", title) } class="flex-1 gap-2 ">
+			{ children... }
+		</div>
+		<div class="flex flex-row justify-center my-10">
+			<div class="flex-none"></div>
+			<div class="flex join ">
+				<div
+					hx-boost="true"
+					hx-get={ ToPath(path, form, p.Pre) }
+					hx-target={ fmt.Sprintf("#%s_list_page", title) }
+					hx-swap="outerHTML"
+					class="join-item btn"
+				>
+					pre
+				</div>
+				for _,v := range p.Pages {
+					<div
+						hx-boost="true"
+						hx-get={ ToPath(path, form, v) }
+						hx-target={ fmt.Sprintf("#%s_list_page", title) }
+						hx-swap="outerHTML"
+						if v == p.CurrentPage {
+							class="join-item btn btn-primary"
+						} else {
+							class="join-item btn "
+						}
+					>
+						{ fmt.Sprintf("%d",v) }
+					</div>
+				}
+				<div
+					hx-boost="true"
+					hx-get={ ToPath(path, form, p.Next) }
+					hx-target={ fmt.Sprintf("#%s_list_page", title) }
+					hx-swap="outerHTML"
+					class="join-item btn"
+				>
+					next
+				</div>
+			</div>
+		</div>
+	</div>
+}

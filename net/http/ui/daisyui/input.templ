@@ -1,0 +1,42 @@
+package  daisyui
+
+import "fmt"
+
+templ Text(text string) {
+	<div>{ text }</div>
+}
+
+templ Input(name, value, typ string, attrs templ.Attributes, classNames ...string) {
+	<input
+		name={ name }
+		value={ value }
+		type={ typ }
+		class={ classNames }
+		{ attrs... }
+	/>
+}
+
+templ Lable(name string, child templ.Component, classNames ...string) {
+	<label class={ classNames }>
+		<span>{ name }</span>
+		@child
+	</label>
+}
+
+templ Select(name, value string, options map[int]string, classNames ...string) {
+	<select name={ name } value={ value } class={ classNames }>
+		for k,v :=range options {
+			<option value={ fmt.Sprintf("%d", k) }>{ v }</option>
+		}
+	</select>
+}
+
+templ Tooltip(child templ.Component, tipText string, classNames ...string) {
+	<div data-tip={ tipText } class={ "tooltip", classNames }>
+		@child
+	</div>
+}
+
+templ Form(method, action string) {
+	<form method={ method } action={ action }></form>
+}
