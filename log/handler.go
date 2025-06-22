@@ -1,12 +1,13 @@
 package log
 
 import (
-	"golib/log/buffer"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"time"
+
+	"github.com/goflower-io/golib/log/buffer"
 )
 
 type Record struct {
@@ -23,6 +24,7 @@ func (r *Record) AddAttrs(attrs ...*slog.Attr) {
 		r.attrs = append(r.attrs, attrs...)
 	}
 }
+
 func (r *Record) Attrs(f func(a *slog.Attr) bool) {
 	for _, v := range r.attrs {
 		if v != nil {
@@ -63,9 +65,9 @@ func (h *vhandler) handle(ctx context.Context, r *Record) error {
 	h.w.Write(*buf)
 	return nil
 }
+
 func bracket(buf *buffer.Buffer, val string) {
 	buf.WriteString("[")
 	buf.WriteString(val)
 	buf.WriteString("] ")
 }
-

@@ -1,7 +1,6 @@
 package log
 
 import (
-	"golib/log/rotate"
 	"context"
 	"fmt"
 	"io"
@@ -13,6 +12,8 @@ import (
 	"time"
 
 	"github.com/petermattis/goid"
+
+	"github.com/goflower-io/golib/log/rotate"
 )
 
 // ExtractAttrFn extract Attr form Context
@@ -27,7 +28,6 @@ type Logger struct {
 
 // New create a *Logger if rootpath == "" output log to console stdout
 func New(rootpath string, olv slog.Level) (*Logger, error) {
-
 	exec, err := os.Executable()
 	if err != nil {
 		return nil, err
@@ -102,8 +102,8 @@ func (l *Logger) logf(ctx context.Context, level slog.Level, format string, args
 	}
 	_ = l.handler.handle(ctx, r)
 }
-func (l *Logger) log(ctx context.Context, level slog.Level, args ...any) {
 
+func (l *Logger) log(ctx context.Context, level slog.Level, args ...any) {
 	if !l.handler.enabled(ctx, level) {
 		return
 	}
@@ -150,6 +150,7 @@ func (l *Logger) DebugContext(ctx context.Context, args ...any) {
 func (l *Logger) InfoContext(ctx context.Context, args ...any) {
 	l.log(ctx, slog.LevelInfo, args...)
 }
+
 func (l *Logger) WarnContext(ctx context.Context, args ...any) {
 	l.log(ctx, slog.LevelWarn, args...)
 }
@@ -157,6 +158,7 @@ func (l *Logger) WarnContext(ctx context.Context, args ...any) {
 func (l *Logger) ErrorContext(ctx context.Context, args ...any) {
 	l.log(ctx, slog.LevelError, args...)
 }
+
 func (l *Logger) Debugf(format string, args ...any) {
 	l.logf(context.Background(), slog.LevelDebug, format, args...)
 }
@@ -180,6 +182,7 @@ func (l *Logger) DebugfContext(ctx context.Context, format string, args ...any) 
 func (l *Logger) InfofContext(ctx context.Context, format string, args ...any) {
 	l.logf(ctx, slog.LevelInfo, format, args...)
 }
+
 func (l *Logger) WarnfContext(ctx context.Context, format string, args ...any) {
 	l.logf(ctx, slog.LevelWarn, format, args...)
 }
@@ -187,4 +190,3 @@ func (l *Logger) WarnfContext(ctx context.Context, format string, args ...any) {
 func (l *Logger) ErrorfContext(ctx context.Context, format string, args ...any) {
 	l.logf(ctx, slog.LevelError, format, args...)
 }
-

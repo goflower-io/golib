@@ -12,8 +12,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	pb "github.com/happycrud/golib/demo/helloworld/helloworld"
-	"github.com/happycrud/golib/disc"
+	"github.com/goflower-io/golib/disc"
+	pb "github.com/goflower-io/golib/examples/helloworld/helloworld"
 )
 
 var port = flag.Int("port", 50051, "The server port")

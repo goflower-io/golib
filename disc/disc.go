@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/happycrud/golib/net/rpc/pjson"
+	"github.com/goflower-io/golib/net/rpc/pjson"
 )
 
 var clientFn = sync.OnceValue[*clientv3.Client](initEc)

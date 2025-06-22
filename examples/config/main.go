@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/happycrud/golib/cfg"
+	"github.com/goflower-io/golib/cfg"
 )
 
 type Demo struct {

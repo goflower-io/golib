@@ -7,9 +7,9 @@ import (
 	"log"
 	"time"
 
-	pb "github.com/happycrud/golib/demo/helloworld/helloworld"
-	"github.com/happycrud/golib/disc"
-	"github.com/happycrud/golib/net/rpc/pjsonc"
+	"github.com/goflower-io/golib/disc"
+	pb "github.com/goflower-io/golib/examples/helloworld/helloworld"
+	"github.com/goflower-io/golib/net/rpc/pjsonc"
 )
 
 const (
