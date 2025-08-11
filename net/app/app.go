@@ -325,9 +325,15 @@ func (a *App) Run() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	<-ch
-	a.h1.Shutdown(context.Background())
-	a.rpc.GracefulStop()
-	a.prom.Shutdown(context.Background())
+	if a.h1 != nil {
+		a.h1.Shutdown(context.Background())
+	}
+	if a.rpc != nil {
+		a.rpc.GracefulStop()
+	}
+	if a.prom != nil {
+		a.prom.Shutdown(context.Background())
+	}
 	for _, v := range a.mList {
 		v.Close()
 	}
