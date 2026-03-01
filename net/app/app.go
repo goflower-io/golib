@@ -20,8 +20,6 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-
-	h1 "github.com/goflower-io/golib/net/http"
 )
 
 type Addr struct {
@@ -367,7 +365,7 @@ func (a *App) loadH1Handler() {
 		h = cors.New(*a.options.corsOptions).Handler(h)
 	}
 	// recovery log metric hander
-	mm := h1.RecoveryMiddle(h1.LogMidddle(h1.MetricMiddle("app").Hander(h.ServeHTTP)))
+	mm := RecoveryMiddle(LogMidddle(MetricMiddle("app").Hander(h.ServeHTTP)))
 
 	a.h1.Handler = mm
 }

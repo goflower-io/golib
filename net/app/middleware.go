@@ -1,4 +1,4 @@
-package http
+package app
 
 import (
 	"log/slog"
@@ -9,8 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type Middleware func(h http.HandlerFunc) http.HandlerFunc
-
+// type Middleware func(h http.Handler) http.Handler
 var RecoveryMiddle = func(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {

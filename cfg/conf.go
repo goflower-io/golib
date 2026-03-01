@@ -82,7 +82,7 @@ type Configs struct {
 	closeCh chan struct{}
 }
 
-func (c *Configs) UnmarshalTo(key string, object interface{}) error {
+func (c *Configs) UnmarshalTo(key string, object any) error {
 	if v, ok := c.Raw(key); !ok {
 		return errors.New("key not exist")
 	} else {
@@ -107,7 +107,7 @@ func (c *Configs) Watch(key string) (chan []byte, error) {
 	if f, ok = c.Content(key); !ok {
 		return nil, errors.New("key is not exist")
 	}
-	f.RawContentPipe = make(chan []byte)
+	f.RawContentPipe = make(chan []byte, 4)
 	return f.RawContentPipe, nil
 }
 
