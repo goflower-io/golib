@@ -8,36 +8,35 @@ import (
 	"github.com/a-h/templ"
 )
 
-// Templ 渲染 templ.Component，直接流式写入 ResponseWriter
+// Templ renders a templ.Component and streams it to the ResponseWriter.
 func (wr *Writer) Templ(status int, component templ.Component) {
 	wr.w.Header().Set("Content-Type", MIMEHtml)
 	wr.w.WriteHeader(status)
 	if err := component.Render(wr.r.Context(), wr.w); err != nil {
-		// header 已发出，只能记录日志，无法再改状态码
-		// 生产建议接入 slog/zap
+		// Headers are already sent; we can only log, not change the status code.
 		http.Error(wr.w, "templ render error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
-// TemplOk 200 渲染 templ 组件（最常用）
+// TemplOk renders a templ.Component with a 200 status code.
 func (wr *Writer) TemplOk(component templ.Component) {
 	wr.Templ(http.StatusOK, component)
 }
 
-// TemplErr 渲染 templ 错误页组件
-// errComponent 通常是你项目里定义好的 ErrorPage(code, msg) templ.Component
+// TemplErr renders an error page component with the status derived from err.
+// errComponent is typically a project-level ErrorPage(code, msg) component.
 func (wr *Writer) TemplErr(err error, errComponent templ.Component) {
 	he := toHTTPError(err)
 	wr.Templ(he.Status, errComponent)
 }
 
-// TemplFragment 渲染 templ 组件作为 HTMX 局部片段
-// 自动配合已设置的 HX-* 头，无需额外操作
+// TemplFragment renders a templ.Component as an HTMX partial fragment (200).
 func (wr *Writer) TemplFragment(component templ.Component) {
 	wr.Templ(http.StatusOK, component)
 }
 
-// TemplString 将 templ 组件渲染为字符串（用于邮件、SSE、测试等非 HTTP 场景）
+// TemplString renders a templ.Component to a string.
+// Useful for emails, SSE payloads, and tests.
 func TemplString(ctx context.Context, component templ.Component) (string, error) {
 	var buf bytes.Buffer
 	if err := component.Render(ctx, &buf); err != nil {
@@ -46,7 +45,7 @@ func TemplString(ctx context.Context, component templ.Component) (string, error)
 	return buf.String(), nil
 }
 
-// TemplBytes 将 templ 组件渲染为 []byte
+// TemplBytes renders a templ.Component to a byte slice.
 func TemplBytes(ctx context.Context, component templ.Component) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := component.Render(ctx, &buf); err != nil {

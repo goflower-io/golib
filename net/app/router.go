@@ -6,8 +6,25 @@ import (
 	"strings"
 )
 
+// -------------------------------------------------------
+// Middleware & Handler types
+// -------------------------------------------------------
+
+// Middleware is a function that wraps an http.Handler.
 type Middleware func(http.Handler) http.Handler
 
+// HandlerFunc is the framework's handler type. It receives a *Writer instead
+// of http.ResponseWriter so handlers can use response helpers directly,
+// without calling NewWriter manually.
+type HandlerFunc func(*Writer, *http.Request)
+
+// ServeHTTP implements http.Handler. It creates a *Writer and invokes the handler.
+func (h HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h(NewWriter(w, r), r)
+}
+
+// chain applies middlewares left-to-right around h.
+// Execution order: m1 → m2 → m3 → handler.
 func chain(h http.Handler, middlewares ...Middleware) http.Handler {
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		h = middlewares[i](h)
@@ -15,55 +32,64 @@ func chain(h http.Handler, middlewares ...Middleware) http.Handler {
 	return h
 }
 
+// -------------------------------------------------------
+// Router
+// -------------------------------------------------------
+
+// Router wraps http.ServeMux with prefix and middleware support.
+// All sub-routers created via Group share the same underlying ServeMux.
 type Router struct {
 	mux         *http.ServeMux
 	prefix      string
 	middlewares []Middleware
 }
 
+// NewRouter creates a root Router with an empty prefix and no middlewares.
 func NewRouter() *Router {
 	return &Router{
 		mux: http.NewServeMux(),
 	}
 }
 
-// ServeHTTP 实现 http.Handler，可直接传给 http.ListenAndServe
+// ServeHTTP implements http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mux.ServeHTTP(w, req)
 }
 
-// Use 注册全局中间件（必须在注册路由之前调用）
+// Use appends global middlewares. Must be called before registering routes.
 func (r *Router) Use(m ...Middleware) *Router {
 	r.middlewares = append(r.middlewares, m...)
 	return r
 }
 
-// Group 创建路由分组，继承父路由的中间件
+// Group returns a new Router scoped to prefix, inheriting parent middlewares.
+// Additional middlewares m are appended after the inherited ones.
 func (r *Router) Group(prefix string, m ...Middleware) *Router {
 	return &Router{
-		mux:         r.mux, // 共享同一个 ServeMux
+		mux:         r.mux, // shared with parent
 		prefix:      r.prefix + prefix,
 		middlewares: append(append([]Middleware{}, r.middlewares...), m...),
 	}
 }
 
-// Handle 注册路由，自动拼接前缀并应用中间件链
+// Handle registers a standard http.Handler at pattern (with prefix applied).
+// Use this to integrate third-party handlers.
+// Middleware priority: global → group → route.
 func (r *Router) Handle(pattern string, h http.Handler, m ...Middleware) {
 	fullPattern := r.prefix + pattern
-	// 路由级中间件优先级: 全局 → 分组 → 路由
-	allMiddlewares := append(append([]Middleware{}, r.middlewares...), m...)
-	r.mux.Handle(fullPattern, chain(h, allMiddlewares...))
+	all := append(append([]Middleware{}, r.middlewares...), m...)
+	r.mux.Handle(fullPattern, chain(h, all...))
 }
 
-// HandleFunc 同 Handle，接受 func
-func (r *Router) HandleFunc(pattern string, h http.HandlerFunc, m ...Middleware) {
+// HandleFunc registers a HandlerFunc at pattern.
+// The *Writer is created automatically for each request.
+func (r *Router) HandleFunc(pattern string, h HandlerFunc, m ...Middleware) {
 	r.Handle(pattern, h, m...)
 }
 
-// Method 语义化注册，pattern 格式遵循 Go 1.22 路由语法
-// 例: r.Method("GET /users/{id}", handler)
+// Method registers a standard http.Handler using Go 1.22 method+path syntax.
+// Example: r.Method("GET /users/{id}", handler)
 func (r *Router) Method(pattern string, h http.Handler, m ...Middleware) {
-	// 如果 pattern 已经包含 method 前缀，直接拼接路径部分
 	parts := strings.SplitN(pattern, " ", 2)
 	if len(parts) == 2 {
 		r.Handle(parts[0]+" "+r.prefix+parts[1], h, m...)
@@ -72,37 +98,43 @@ func (r *Router) Method(pattern string, h http.Handler, m ...Middleware) {
 	r.Handle(pattern, h, m...)
 }
 
-// GET / POST / PUT / DELETE / PATCH 快捷方法
-func (r *Router) GET(path string, h http.HandlerFunc, m ...Middleware) {
+// GET registers a HandlerFunc for GET requests.
+func (r *Router) GET(path string, h HandlerFunc, m ...Middleware) {
 	r.Handle("GET "+path, h, m...)
 }
 
-func (r *Router) POST(path string, h http.HandlerFunc, m ...Middleware) {
+// POST registers a HandlerFunc for POST requests.
+func (r *Router) POST(path string, h HandlerFunc, m ...Middleware) {
 	r.Handle("POST "+path, h, m...)
 }
 
-func (r *Router) PUT(path string, h http.HandlerFunc, m ...Middleware) {
+// PUT registers a HandlerFunc for PUT requests.
+func (r *Router) PUT(path string, h HandlerFunc, m ...Middleware) {
 	r.Handle("PUT "+path, h, m...)
 }
 
-func (r *Router) DELETE(path string, h http.HandlerFunc, m ...Middleware) {
+// DELETE registers a HandlerFunc for DELETE requests.
+func (r *Router) DELETE(path string, h HandlerFunc, m ...Middleware) {
 	r.Handle("DELETE "+path, h, m...)
 }
 
-func (r *Router) PATCH(path string, h http.HandlerFunc, m ...Middleware) {
+// PATCH registers a HandlerFunc for PATCH requests.
+func (r *Router) PATCH(path string, h HandlerFunc, m ...Middleware) {
 	r.Handle("PATCH "+path, h, m...)
 }
 
 // -------------------------------------------------------
-// Context 工具：在中间件和 handler 间传递值
+// Context helpers: pass values between middlewares and handlers
 // -------------------------------------------------------
 
 type contextKey string
 
+// SetValue stores a value in the request context under the given key.
 func SetValue(ctx context.Context, key string, val any) context.Context {
 	return context.WithValue(ctx, contextKey(key), val)
 }
 
+// GetValue retrieves a value from the request context by key.
 func GetValue(ctx context.Context, key string) (any, bool) {
 	val := ctx.Value(contextKey(key))
 	return val, val != nil

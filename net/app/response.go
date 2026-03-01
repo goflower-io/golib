@@ -12,18 +12,19 @@ import (
 )
 
 // -------------------------------------------------------
-// 统一响应结构
+// Unified response envelope
 // -------------------------------------------------------
 
+// Response is the standard JSON/XML response body returned by all endpoints.
 type Response struct {
-	Code    int    `json:"code"             xml:"code"`
-	Message string `json:"message"          xml:"message"`
-	Data    any    `json:"data,omitempty"   xml:"data,omitempty"`
+	Code    int    `json:"code"               xml:"code"`
+	Message string `json:"message"            xml:"message"`
+	Data    any    `json:"data,omitempty"     xml:"data,omitempty"`
 	TraceID string `json:"trace_id,omitempty" xml:"trace_id,omitempty"`
 }
 
 // -------------------------------------------------------
-// Content-Type 常量
+// Content-Type constants
 // -------------------------------------------------------
 
 const (
@@ -35,22 +36,25 @@ const (
 )
 
 // -------------------------------------------------------
-// Writer：核心写入器
+// Writer — core response writer
 // -------------------------------------------------------
 
+// Writer wraps http.ResponseWriter and *http.Request to provide typed
+// response helpers. Create one per request via NewWriter.
 type Writer struct {
 	w       http.ResponseWriter
 	r       *http.Request
 	traceID string
 }
 
-// New 创建 Writer，推荐在 handler 入口处调用
+// NewWriter creates a Writer. Called automatically when using HandlerFunc.
 func NewWriter(w http.ResponseWriter, r *http.Request) *Writer {
 	return &Writer{w: w, r: r, traceID: traceIDFromCtx(r)}
 }
 
 // ----- JSON -----
 
+// JSON writes a JSON response with the given status code.
 func (wr *Writer) JSON(status int, data any) {
 	wr.writeJSON(status, &Response{
 		Code:    status,
@@ -60,8 +64,10 @@ func (wr *Writer) JSON(status int, data any) {
 	})
 }
 
+// JSONOk writes a 200 JSON response.
 func (wr *Writer) JSONOk(data any) { wr.JSON(http.StatusOK, data) }
 
+// JSONErr writes a JSON error response derived from err.
 func (wr *Writer) JSONErr(err error) {
 	he := toHTTPError(err)
 	wr.writeJSON(he.Status, &Response{
@@ -81,6 +87,7 @@ func (wr *Writer) writeJSON(status int, resp *Response) {
 
 // ----- XML -----
 
+// XML writes an XML response with the given status code.
 func (wr *Writer) XML(status int, data any) {
 	wr.writeXML(status, &Response{
 		Code:    status,
@@ -90,8 +97,10 @@ func (wr *Writer) XML(status int, data any) {
 	})
 }
 
+// XMLOk writes a 200 XML response.
 func (wr *Writer) XMLOk(data any) { wr.XML(http.StatusOK, data) }
 
+// XMLErr writes an XML error response derived from err.
 func (wr *Writer) XMLErr(err error) {
 	he := toHTTPError(err)
 	wr.writeXML(he.Status, &Response{
@@ -112,6 +121,7 @@ func (wr *Writer) writeXML(status int, resp *Response) {
 
 // ----- Protobuf -----
 
+// Proto writes a protobuf response with the given status code.
 func (wr *Writer) Proto(status int, msg proto.Message) {
 	b, err := proto.Marshal(msg)
 	if err != nil {
@@ -123,18 +133,19 @@ func (wr *Writer) Proto(status int, msg proto.Message) {
 	wr.w.Write(b)
 }
 
+// ProtoOk writes a 200 protobuf response.
 func (wr *Writer) ProtoOk(msg proto.Message) { wr.Proto(http.StatusOK, msg) }
 
-// ----- HTMX -----
+// ----- HTML / Template -----
 
-// HTML 直接写 HTML 字符串（HTMX 局部片段常用）
+// HTML writes a raw HTML string with the given status code.
 func (wr *Writer) HTML(status int, html string) {
 	wr.w.Header().Set("Content-Type", MIMEHtml)
 	wr.w.WriteHeader(status)
 	wr.w.Write([]byte(html))
 }
 
-// Template 渲染 html/template 模板
+// Template renders an html/template.Template with the given data.
 func (wr *Writer) Template(status int, tmpl *template.Template, data any) {
 	wr.w.Header().Set("Content-Type", MIMEHtml)
 	wr.w.WriteHeader(status)
@@ -143,8 +154,10 @@ func (wr *Writer) Template(status int, tmpl *template.Template, data any) {
 	}
 }
 
-// ----- 内容协商：根据 Accept 头自动选择格式 -----
+// ----- Content negotiation -----
 
+// Negotiate picks the response format based on the Accept header:
+// protobuf → xml → json (default).
 func (wr *Writer) Negotiate(status int, data any, protoMsg proto.Message) {
 	accept := wr.r.Header.Get("Accept")
 	switch {
@@ -157,18 +170,21 @@ func (wr *Writer) Negotiate(status int, data any, protoMsg proto.Message) {
 	}
 }
 
-// ----- 常用快捷方法 -----
+// ----- Shortcuts -----
 
+// NoContent writes a 204 No Content response.
 func (wr *Writer) NoContent() { wr.w.WriteHeader(http.StatusNoContent) }
 
+// NotFound writes a 404 JSON error response.
 func (wr *Writer) NotFound() { wr.JSONErr(ErrNotFound) }
 
+// Forbidden writes a 403 JSON error response.
 func (wr *Writer) Forbidden() { wr.JSONErr(ErrForbidden) }
 
+// Unauthorized writes a 401 JSON error response.
 func (wr *Writer) Unauthorized() { wr.JSONErr(ErrUnauthorized) }
 
-// ----- Text -----
-
+// Text writes a plain-text response.
 func (wr *Writer) Text(status int, text string) {
 	wr.w.Header().Set("Content-Type", MIMEText)
 	wr.w.WriteHeader(status)
@@ -176,9 +192,10 @@ func (wr *Writer) Text(status int, text string) {
 }
 
 // -------------------------------------------------------
-// 错误体系
+// Error types
 // -------------------------------------------------------
 
+// HTTPError is an error that carries an HTTP status code and message.
 type HTTPError struct {
 	Status  int
 	Message string
@@ -189,7 +206,7 @@ func (e *HTTPError) Error() string { return e.Message }
 
 func (e *HTTPError) Unwrap() error { return e.Err }
 
-// 预定义错误
+// Predefined HTTP errors.
 var (
 	ErrBadRequest   = &HTTPError{Status: 400, Message: "Bad Request"}
 	ErrUnauthorized = &HTTPError{Status: 401, Message: "Unauthorized"}
@@ -199,12 +216,12 @@ var (
 	ErrInternal     = &HTTPError{Status: 500, Message: "Internal Server Error"}
 )
 
-// NewError 自定义错误
+// NewError creates a custom HTTPError.
 func NewError(status int, message string) *HTTPError {
 	return &HTTPError{Status: status, Message: message}
 }
 
-// WrapError 包装底层错误（不暴露给客户端）
+// WrapError wraps an underlying error without exposing it to the client.
 func WrapError(httpErr *HTTPError, cause error) *HTTPError {
 	return &HTTPError{Status: httpErr.Status, Message: httpErr.Message, Err: cause}
 }
@@ -217,21 +234,29 @@ func toHTTPError(err error) *HTTPError {
 	return &HTTPError{Status: 500, Message: "Internal Server Error", Err: err}
 }
 
+// -------------------------------------------------------
+// Template registry
+// -------------------------------------------------------
+
+// TemplateRegistry is a thread-safe store of named html/template.Templates.
 type TemplateRegistry struct {
 	mu        sync.RWMutex
 	templates map[string]*template.Template
 }
 
+// Templates is the global template registry.
 var Templates = &TemplateRegistry{
 	templates: make(map[string]*template.Template),
 }
 
+// Register stores tmpl under name.
 func (tr *TemplateRegistry) Register(name string, tmpl *template.Template) {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 	tr.templates[name] = tmpl
 }
 
+// Get retrieves a template by name.
 func (tr *TemplateRegistry) Get(name string) (*template.Template, bool) {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
@@ -239,7 +264,7 @@ func (tr *TemplateRegistry) Get(name string) (*template.Template, bool) {
 	return t, ok
 }
 
-// RenderTemplate 通过名称渲染已注册的模板
+// RenderTemplate renders a template from the global registry by name.
 func (wr *Writer) RenderTemplate(status int, name string, data any) {
 	tmpl, ok := Templates.Get(name)
 	if !ok {
@@ -250,7 +275,7 @@ func (wr *Writer) RenderTemplate(status int, name string, data any) {
 }
 
 // -------------------------------------------------------
-// 工具函数
+// Internal helpers
 // -------------------------------------------------------
 
 func contains(s, sub string) bool {
@@ -267,7 +292,7 @@ func containsStr(s, sub string) bool {
 	return false
 }
 
-// traceIDFromCtx 从 context 取 traceID（配合链路追踪中间件使用）
+// traceIDFromCtx extracts a trace ID from the request context (set by tracing middleware).
 func traceIDFromCtx(r *http.Request) string {
 	if id, ok := r.Context().Value(ctxKeyTraceID{}).(string); ok {
 		return id

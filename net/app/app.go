@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
+// Addr holds a host:port pair.
 type Addr struct {
 	IP   string
 	Port int
@@ -31,71 +32,77 @@ func (a *Addr) String() string {
 	return fmt.Sprintf("%s:%d", a.IP, a.Port)
 }
 
+// TLSConfig holds the address and certificate paths for a TLS listener.
 type TLSConfig struct {
 	Addr
 	KeyPath  string
 	CertPath string
 }
 
+// SLogConfig configures the default slog handler.
 type SLogConfig struct {
 	Level      slog.Level
 	JSONOutPut bool
 	AddSource  bool
 }
 
+// AppOptions collects optional configuration for App.
 type AppOptions struct {
-	// if nil not run tls
-	httptls *TLSConfig
-	// if nil not run tcp // if Port == TLS.Port port run on same port
-	http *Addr
-	//
+	httptls       *TLSConfig  // nil → no TLS listener
+	http          *Addr       // nil → no plain-TCP listener; same port as TLS → shared listener
 	enableGRPCWeb bool
-
-	corsOptions *cors.Options
-
-	prom *Addr
-
-	slog *SLogConfig
+	corsOptions   *cors.Options
+	prom          *Addr // nil → no Prometheus metrics server
+	slog          *SLogConfig
 }
 
+// AppOption is a functional option for New.
 type AppOption func(aos *AppOptions)
 
+// WithTLSConfig enables a TLS listener using the given certificate and key.
 func WithTLSConfig(c *TLSConfig) AppOption {
 	return func(aos *AppOptions) {
 		aos.httptls = c
 	}
 }
 
+// WithAddr enables a plain-TCP HTTP/gRPC listener on ip:p.
 func WithAddr(ip string, p int) AppOption {
 	return func(aos *AppOptions) {
 		aos.http = &Addr{IP: ip, Port: p}
 	}
 }
 
+// WithPromAddr starts a separate Prometheus metrics server on ip:p.
 func WithPromAddr(ip string, p int) AppOption {
 	return func(aos *AppOptions) {
 		aos.prom = &Addr{IP: ip, Port: p}
 	}
 }
 
+// WihtGrpcWeb enables grpc-web proxying on the HTTP listener.
 func WihtGrpcWeb(open bool) AppOption {
 	return func(aos *AppOptions) {
 		aos.enableGRPCWeb = open
 	}
 }
 
+// WithCorsOptions applies CORS headers using the given options.
 func WithCorsOptions(opt *cors.Options) AppOption {
 	return func(aos *AppOptions) {
 		aos.corsOptions = opt
 	}
 }
 
+// WithSlogConfig replaces the default slog handler.
 func WithSlogConfig(l *SLogConfig) AppOption {
 	return func(aos *AppOptions) {
 		aos.slog = l
 	}
 }
 
+// App is the top-level server. It embeds *Router so all routing methods
+// (GET, POST, Group, Use, …) are available directly on App.
 type App struct {
 	*Router
 	options    *AppOptions
@@ -109,6 +116,8 @@ type App struct {
 	prom       *http.Server
 }
 
+// New creates an App with the given options. Health-check and reflection
+// services are registered on the gRPC server automatically.
 func New(options ...AppOption) *App {
 	a := &App{
 		Router:  NewRouter(),
@@ -131,11 +140,7 @@ func (a *App) listenTLS() {
 		panic(err)
 	}
 	cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
-	a.onlyTLS, err = tls.Listen(
-		"tcp",
-		a.options.httptls.String(),
-		cfg,
-	)
+	a.onlyTLS, err = tls.Listen("tcp", a.options.httptls.String(), cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -149,6 +154,7 @@ func (a *App) listenTCP() {
 	}
 }
 
+// listens opens the configured listeners. Panics if neither http nor httptls is set.
 func (a *App) listens() {
 	slog.Info("init listens")
 	var err error
@@ -157,11 +163,9 @@ func (a *App) listens() {
 	}
 	if a.options.http != nil && a.options.httptls != nil {
 		if a.options.http.Port == a.options.httptls.Port {
+			// Same port: HTTP and TLS are demuxed on a single listener.
 			slog.Info("both tcp tls")
-			a.bothTCPTLS, err = net.Listen(
-				"tcp",
-				a.options.http.String(),
-			)
+			a.bothTCPTLS, err = net.Listen("tcp", a.options.http.String())
 			if err != nil {
 				panic(err)
 			}
@@ -179,6 +183,7 @@ func (a *App) listens() {
 	}
 }
 
+// startServe multiplexes HTTP1 and gRPC on a single listener using cmux.
 func (a *App) startServe(l net.Listener) {
 	slog.Info("server ", "listen", l.Addr())
 	m := cmux.New(l)
@@ -194,7 +199,6 @@ func (a *App) startServe(l net.Listener) {
 		}
 	}()
 	a.wg.Add(1)
-
 	go func() {
 		defer a.wg.Done()
 		if err := a.h1.Serve(httpL); err != nil {
@@ -202,7 +206,6 @@ func (a *App) startServe(l net.Listener) {
 		}
 	}()
 	a.wg.Add(1)
-
 	go func() {
 		defer a.wg.Done()
 		if err := m.Serve(); err != nil {
@@ -212,17 +215,18 @@ func (a *App) startServe(l net.Listener) {
 	a.mList = append(a.mList, m)
 }
 
+// start launches all configured listeners and their goroutines.
 func (a *App) start() {
 	slog.Info("listen mux")
 	if a.bothTCPTLS != nil {
+		// Single port serving both plain HTTP/gRPC and TLS HTTP/gRPC.
 		m := cmux.New(a.bothTCPTLS)
 		grpcL := m.MatchWithWriters(
 			cmux.HTTP2MatchHeaderFieldPrefixSendSettings("content-type", "application/grpc"),
 		)
 		httpL := m.Match(cmux.HTTP1Fast())
-
 		other := m.Match(cmux.Any())
-		// load tls file
+
 		cert, err := tls.LoadX509KeyPair(a.options.httptls.CertPath, a.options.httptls.KeyPath)
 		if err != nil {
 			panic(err)
@@ -230,47 +234,23 @@ func (a *App) start() {
 		cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
 		tlsL := tls.NewListener(other, cfg)
 		tlsm := cmux.New(tlsL)
-
 		grpcsL := tlsm.MatchWithWriters(
 			cmux.HTTP2MatchHeaderFieldPrefixSendSettings("content-type", "application/grpc"),
 		)
 		httpsL := tlsm.Match(cmux.HTTP1Fast())
 
 		a.wg.Add(1)
-		go func() {
-			defer a.wg.Done()
-			a.h1.Serve(httpL)
-		}()
+		go func() { defer a.wg.Done(); a.h1.Serve(httpL) }()
 		a.wg.Add(1)
-
-		go func() {
-			defer a.wg.Done()
-			a.rpc.Serve(grpcL)
-		}()
+		go func() { defer a.wg.Done(); a.rpc.Serve(grpcL) }()
 		a.wg.Add(1)
-
-		go func() {
-			defer a.wg.Done()
-			a.h1.Serve(httpsL)
-		}()
+		go func() { defer a.wg.Done(); a.h1.Serve(httpsL) }()
 		a.wg.Add(1)
-
-		go func() {
-			defer a.wg.Done()
-			a.rpc.Serve(grpcsL)
-		}()
+		go func() { defer a.wg.Done(); a.rpc.Serve(grpcsL) }()
 		a.wg.Add(1)
-
-		go func() {
-			defer a.wg.Done()
-			tlsm.Serve()
-		}()
+		go func() { defer a.wg.Done(); tlsm.Serve() }()
 		a.wg.Add(1)
-
-		go func() {
-			defer a.wg.Done()
-			m.Serve()
-		}()
+		go func() { defer a.wg.Done(); m.Serve() }()
 
 		a.mList = append(a.mList, tlsm, m)
 		return
@@ -283,6 +263,7 @@ func (a *App) start() {
 	}
 }
 
+// runProm starts the Prometheus metrics server if configured.
 func (a *App) runProm() {
 	if a.options.prom != nil {
 		met := http.NewServeMux()
@@ -298,6 +279,7 @@ func (a *App) runProm() {
 	}
 }
 
+// configDefaultSlog replaces the default slog handler if WithSlogConfig was used.
 func (a *App) configDefaultSlog() {
 	if a.options.slog != nil {
 		opt := &slog.HandlerOptions{
@@ -312,6 +294,8 @@ func (a *App) configDefaultSlog() {
 	}
 }
 
+// Run starts all servers and blocks until an OS signal is received,
+// then performs a graceful shutdown.
 func (a *App) Run() {
 	a.configDefaultSlog()
 	slog.Info("start server")
@@ -319,10 +303,11 @@ func (a *App) Run() {
 	a.loadH1Handler()
 	a.start()
 	a.runProm()
-	// wait sign to exit
+
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	<-ch
+
 	if a.h1 != nil {
 		a.h1.Shutdown(context.Background())
 	}
@@ -335,15 +320,17 @@ func (a *App) Run() {
 	for _, v := range a.mList {
 		v.Close()
 	}
-
 	slog.Info("finish server")
 	a.wg.Wait()
 }
 
+// RegisteGrpcService registers a gRPC service implementation with the server.
 func (a *App) RegisteGrpcService(desc *grpc.ServiceDesc, s any) {
 	a.rpc.RegisterService(desc, s)
 }
 
+// loadH1Handler assembles the HTTP handler chain:
+// Router → (optional grpc-web) → (optional CORS) → recovery/log/metrics.
 func (a *App) loadH1Handler() {
 	slog.Info("initHTTPMux")
 	var h http.Handler
@@ -362,8 +349,7 @@ func (a *App) loadH1Handler() {
 	if a.options.corsOptions != nil {
 		h = cors.New(*a.options.corsOptions).Handler(h)
 	}
-	// recovery log metric hander
+	// Wrap with recovery, structured logging, and Prometheus metrics.
 	mm := RecoveryMiddle(LogMidddle(MetricMiddle("app").Hander(h.ServeHTTP)))
-
 	a.h1.Handler = mm
 }

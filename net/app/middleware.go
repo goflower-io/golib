@@ -9,7 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// type Middleware func(h http.Handler) http.Handler
+// RecoveryMiddle catches panics, logs the stack trace, and returns 500.
 var RecoveryMiddle = func(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -28,6 +28,7 @@ var RecoveryMiddle = func(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// LogMidddle logs method, path, status, and duration for every request.
 var LogMidddle = func(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -45,6 +46,7 @@ var LogMidddle = func(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// StatusRecorder wraps http.ResponseWriter to capture the written status code.
 type StatusRecorder struct {
 	http.ResponseWriter
 	Status int
@@ -55,12 +57,14 @@ func (r *StatusRecorder) WriteHeader(status int) {
 	r.ResponseWriter.WriteHeader(status)
 }
 
+// PromMiddleWare records request count and latency as Prometheus metrics.
 type PromMiddleWare struct {
 	reqs    *prometheus.CounterVec
 	latency *prometheus.HistogramVec
 }
 
-// NewMiddleware returns a new prometheus Middleware handler.
+// MetricMiddle creates and registers Prometheus metrics for the given service name.
+// Optional buckets override the default millisecond histogram buckets.
 func MetricMiddle(name string, buckets ...float64) *PromMiddleWare {
 	var m PromMiddleWare
 	m.reqs = prometheus.NewCounterVec(
@@ -88,6 +92,7 @@ func MetricMiddle(name string, buckets ...float64) *PromMiddleWare {
 	return &m
 }
 
+// Hander wraps h to record Prometheus metrics for each request.
 func (m *PromMiddleWare) Hander(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
