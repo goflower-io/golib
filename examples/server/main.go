@@ -11,7 +11,7 @@ import (
 
 func main() {
 	a := app.New(
-		app.WithAddr("0.0.0.0", 7788),
+		app.WithAddr("0.0.0.0", 7890),
 		app.WithTLSConfig(&app.TLSConfig{
 			Addr: app.Addr{
 				Port: 7890,
@@ -28,12 +28,12 @@ func main() {
 		app.WithPromAddr("127.0.0.1", 7789),
 		app.WihtGrpcWeb(true),
 	)
-	a.GET("/hello", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	a.GET("/hello", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "hello")
-	}))
-	a.GET("/greet", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	})
+	a.GET("/greet", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "greet")
-	}))
+	})
 
 	a.Run()
 }

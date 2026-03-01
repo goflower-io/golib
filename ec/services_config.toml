@@ -1,8 +1,0 @@
-
-[etcd]
-address  = ["http://localhost:2379"]
-
-[[services]]
-id = "helloworld"
-config_path = "/data/app/helloworld/configs/"
-watch_keys = ["oo.json"]

@@ -1,4 +1,4 @@
-package http
+package app
 
 import (
 	"encoding/json"
@@ -11,14 +11,26 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+// Validator is a lazily-initialized struct validator.
 var Validator = sync.OnceValue(func() *validator.Validate {
 	return validator.New(validator.WithRequiredStructEnabled())
 })
 
+// FormParser is a lazily-initialized form decoder.
 var FormParser = sync.OnceValue(func() *form.Decoder {
 	return form.NewDecoder()
 })
 
+// ResponseType indicates which response format a handler should use.
+type ResponseType string
+
+const (
+	ResponseJSON ResponseType = "json"
+	ResponseHTML ResponseType = "html"
+	ResponseHTMX ResponseType = "htmx"
+)
+
+// ResponseConentType infers the desired response format from request headers.
 func ResponseConentType(req *http.Request) ResponseType {
 	if req.Header.Get("Accept") == "application/json" {
 		return ResponseJSON
@@ -29,29 +41,21 @@ func ResponseConentType(req *http.Request) ResponseType {
 	return ResponseHTML
 }
 
-type ResponseType string
-
-const (
-	ResponseJSON ResponseType = "json"
-	ResponseHTML ResponseType = "html"
-	ResponseHTMX ResponseType = "htmx"
-)
-
+// GetRequestParams decodes the request body into reqb.
+// JSON bodies are decoded by Content-Type; everything else is treated as form data.
 func GetRequestParams(reqb any, req *http.Request) error {
 	contentType := req.Header.Get("Content-Type")
 	switch contentType {
 	case "application/json":
-		var body []byte
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			return err
 		}
-
 		if err = json.Unmarshal(body, reqb); err != nil {
 			return err
 		}
 	default:
-		// "application/x-www-form-urlencoded":
+		// application/x-www-form-urlencoded or multipart/form-data
 		if err := req.ParseForm(); err != nil {
 			return err
 		}
@@ -62,12 +66,12 @@ func GetRequestParams(reqb any, req *http.Request) error {
 	return nil
 }
 
-// 分页方法，根据传递过来的页数，每页数，总数，返回分页的内容 7个页数 前 1，2，3，4，5 后 的格式返回,小于5页返回具体页数
+// CaculatePaginator computes a paginator for the given page, page size, and
+// total record count. It returns up to 5 visible page numbers in the style:
+// ← 1 2 3 4 5 →
 func CaculatePaginator(page, size, total int32) *Paginator {
-	var pre int32  // 前一页地址
-	var next int32 // 后一页地址
-	// 根据nums总数，和prepage每页数量 生成分页总数
-	totalPage := int32(math.Ceil(float64(total) / float64(size))) // page总数
+	var pre, next int32
+	totalPage := int32(math.Ceil(float64(total) / float64(size)))
 	if page > totalPage {
 		page = totalPage
 	}
@@ -76,7 +80,7 @@ func CaculatePaginator(page, size, total int32) *Paginator {
 	}
 	var pages []int32
 	switch {
-	case page >= totalPage-5 && totalPage > 5: // 最后5页
+	case page >= totalPage-5 && totalPage > 5: // last 5 pages
 		start := totalPage - 5 + 1
 		pre = page - 1
 		next = int32(math.Min(float64(totalPage), float64(page+1)))
@@ -100,16 +104,17 @@ func CaculatePaginator(page, size, total int32) *Paginator {
 		pre = int32(math.Max(float64(1), float64(page-1)))
 		next = page + 1
 	}
-	paginator := &Paginator{}
-	paginator.Pages = pages
-	paginator.TotalPage = totalPage
-	paginator.Pre = pre
-	paginator.Next = next
-	paginator.CurrentPage = page
-	paginator.PageSize = size
-	return paginator
+	return &Paginator{
+		Pages:       pages,
+		TotalPage:   totalPage,
+		Pre:         pre,
+		Next:        next,
+		CurrentPage: page,
+		PageSize:    size,
+	}
 }
 
+// Paginator holds the computed pagination state for a single page view.
 type Paginator struct {
 	Pages       []int32
 	TotalPage   int32
