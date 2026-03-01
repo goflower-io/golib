@@ -97,6 +97,7 @@ func WithSlogConfig(l *SLogConfig) AppOption {
 }
 
 type App struct {
+	*Router
 	options    *AppOptions
 	bothTCPTLS net.Listener
 	onlyTCP    net.Listener
@@ -105,17 +106,16 @@ type App struct {
 	h1         *http.Server
 	wg         sync.WaitGroup
 	mList      []cmux.CMux
-	httpmux    *http.ServeMux
 	prom       *http.Server
 }
 
 func New(options ...AppOption) *App {
 	a := &App{
+		Router:  NewRouter(),
 		options: &AppOptions{},
 		rpc:     grpc.NewServer(),
 		h1:      &http.Server{},
 		wg:      sync.WaitGroup{},
-		httpmux: http.NewServeMux(),
 	}
 	for _, opt := range options {
 		opt(a.options)
@@ -347,7 +347,7 @@ func (a *App) RegisteGrpcService(desc *grpc.ServiceDesc, s any) {
 func (a *App) loadH1Handler() {
 	slog.Info("initHTTPMux")
 	var h http.Handler
-	h = a.httpmux
+	h = a.Router
 
 	if a.options.enableGRPCWeb {
 		wrappedGrpc := grpcweb.WrapServer(a.rpc)
@@ -356,10 +356,8 @@ func (a *App) loadH1Handler() {
 				wrappedGrpc.ServeHTTP(resp, req)
 				return
 			}
-			// Fall back to other servers.
-			a.httpmux.ServeHTTP(resp, req)
+			a.Router.ServeHTTP(resp, req)
 		})
-
 	}
 	if a.options.corsOptions != nil {
 		h = cors.New(*a.options.corsOptions).Handler(h)
@@ -368,24 +366,4 @@ func (a *App) loadH1Handler() {
 	mm := RecoveryMiddle(LogMidddle(MetricMiddle("app").Hander(h.ServeHTTP)))
 
 	a.h1.Handler = mm
-}
-
-func (a *App) GET(path string, h http.HandlerFunc) {
-	a.httpmux.HandleFunc("GET "+path, h)
-}
-
-func (a *App) POST(path string, h http.HandlerFunc) {
-	a.httpmux.HandleFunc("POST "+path, h)
-}
-
-func (a *App) PUT(path string, h http.HandlerFunc) {
-	a.httpmux.HandleFunc("PUT "+path, h)
-}
-
-func (a *App) DELETE(path string, h http.HandlerFunc) {
-	a.httpmux.HandleFunc("DELETE "+path, h)
-}
-
-func (a *App) HEAD(path string, h http.HandlerFunc) {
-	a.httpmux.HandleFunc("HEAD "+path, h)
 }

@@ -6,25 +6,14 @@ import (
 	"strings"
 )
 
-// -------------------------------------------------------
-// 中间件类型
-// -------------------------------------------------------
-
 type Middleware func(http.Handler) http.Handler
 
-// chain 将多个中间件从左到右串联
-// 执行顺序: m1 → m2 → m3 → handler
 func chain(h http.Handler, middlewares ...Middleware) http.Handler {
-	// 从右往左包裹，保证执行顺序从左到右
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		h = middlewares[i](h)
 	}
 	return h
 }
-
-// -------------------------------------------------------
-// Router
-// -------------------------------------------------------
 
 type Router struct {
 	mux         *http.ServeMux
@@ -32,7 +21,6 @@ type Router struct {
 	middlewares []Middleware
 }
 
-// New 创建根路由
 func NewRouter() *Router {
 	return &Router{
 		mux: http.NewServeMux(),
