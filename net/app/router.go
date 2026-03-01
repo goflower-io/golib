@@ -13,16 +13,6 @@ import (
 // Middleware is a function that wraps an http.Handler.
 type Middleware func(http.Handler) http.Handler
 
-// HandlerFunc is the framework's handler type. It receives a *Writer instead
-// of http.ResponseWriter so handlers can use response helpers directly,
-// without calling NewWriter manually.
-type HandlerFunc func(*Writer, *http.Request)
-
-// ServeHTTP implements http.Handler. It creates a *Writer and invokes the handler.
-func (h HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h(NewWriter(w, r), r)
-}
-
 // chain applies middlewares left-to-right around h.
 // Execution order: m1 → m2 → m3 → handler.
 func chain(h http.Handler, middlewares ...Middleware) http.Handler {
@@ -81,13 +71,12 @@ func (r *Router) Handle(pattern string, h http.Handler, m ...Middleware) {
 	r.mux.Handle(fullPattern, chain(h, all...))
 }
 
-// HandleFunc registers a HandlerFunc at pattern.
-// The *Writer is created automatically for each request.
-func (r *Router) HandleFunc(pattern string, h HandlerFunc, m ...Middleware) {
+// HandleFunc registers an http.HandlerFunc at pattern.
+func (r *Router) HandleFunc(pattern string, h http.HandlerFunc, m ...Middleware) {
 	r.Handle(pattern, h, m...)
 }
 
-// Method registers a standard http.Handler using Go 1.22 method+path syntax.
+// Method registers a handler using Go 1.22 method+path syntax.
 // Example: r.Method("GET /users/{id}", handler)
 func (r *Router) Method(pattern string, h http.Handler, m ...Middleware) {
 	parts := strings.SplitN(pattern, " ", 2)
@@ -98,28 +87,28 @@ func (r *Router) Method(pattern string, h http.Handler, m ...Middleware) {
 	r.Handle(pattern, h, m...)
 }
 
-// GET registers a HandlerFunc for GET requests.
-func (r *Router) GET(path string, h HandlerFunc, m ...Middleware) {
+// GET registers an http.HandlerFunc for GET requests.
+func (r *Router) GET(path string, h http.HandlerFunc, m ...Middleware) {
 	r.Handle("GET "+path, h, m...)
 }
 
-// POST registers a HandlerFunc for POST requests.
-func (r *Router) POST(path string, h HandlerFunc, m ...Middleware) {
+// POST registers an http.HandlerFunc for POST requests.
+func (r *Router) POST(path string, h http.HandlerFunc, m ...Middleware) {
 	r.Handle("POST "+path, h, m...)
 }
 
-// PUT registers a HandlerFunc for PUT requests.
-func (r *Router) PUT(path string, h HandlerFunc, m ...Middleware) {
+// PUT registers an http.HandlerFunc for PUT requests.
+func (r *Router) PUT(path string, h http.HandlerFunc, m ...Middleware) {
 	r.Handle("PUT "+path, h, m...)
 }
 
-// DELETE registers a HandlerFunc for DELETE requests.
-func (r *Router) DELETE(path string, h HandlerFunc, m ...Middleware) {
+// DELETE registers an http.HandlerFunc for DELETE requests.
+func (r *Router) DELETE(path string, h http.HandlerFunc, m ...Middleware) {
 	r.Handle("DELETE "+path, h, m...)
 }
 
-// PATCH registers a HandlerFunc for PATCH requests.
-func (r *Router) PATCH(path string, h HandlerFunc, m ...Middleware) {
+// PATCH registers an http.HandlerFunc for PATCH requests.
+func (r *Router) PATCH(path string, h http.HandlerFunc, m ...Middleware) {
 	r.Handle("PATCH "+path, h, m...)
 }
 
