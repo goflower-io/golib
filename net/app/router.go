@@ -65,10 +65,28 @@ func (r *Router) Group(prefix string, m ...Middleware) *Router {
 // Handle registers a standard http.Handler at pattern (with prefix applied).
 // Use this to integrate third-party handlers.
 // Middleware priority: global → group → route.
+//
+// pattern may be a bare path ("/users") or include the HTTP method
+// using Go 1.22 syntax ("GET /users/{id}"). The group prefix is always
+// inserted into the path segment, never before the method token.
 func (r *Router) Handle(pattern string, h http.Handler, m ...Middleware) {
-	fullPattern := r.prefix + pattern
+	full := r.resolve(pattern)
 	all := append(append([]Middleware{}, r.middlewares...), m...)
-	r.mux.Handle(fullPattern, chain(h, all...))
+	r.mux.Handle(full, chain(h, all...))
+}
+
+// resolve inserts the group prefix into the path segment of pattern.
+//
+//	"GET /foo" with prefix "/api" → "GET /api/foo"
+//	"/foo"     with prefix "/api" → "/api/foo"
+func (r *Router) resolve(pattern string) string {
+	if r.prefix == "" {
+		return pattern
+	}
+	if method, path, ok := strings.Cut(pattern, " "); ok {
+		return method + " " + r.prefix + path
+	}
+	return r.prefix + pattern
 }
 
 // HandleFunc registers an http.HandlerFunc at pattern.
@@ -76,14 +94,30 @@ func (r *Router) HandleFunc(pattern string, h http.HandlerFunc, m ...Middleware)
 	r.Handle(pattern, h, m...)
 }
 
+// H adapts a Writer-based handler to a standard http.HandlerFunc,
+// automatically creating a *Writer for each request.
+//
+// Use it to access all response helpers (JSON, XML, Templ, …) without
+// calling NewWriter manually:
+//
+//	app.GET("/users", app.H(func(w *app.Writer, r *http.Request) {
+//	    w.JSONOk(users)
+//	}))
+func (r *Router) H(fn func(*Writer, *http.Request)) http.HandlerFunc {
+	return H(fn)
+}
+
+// H is the package-level adapter. It converts a Writer-based handler to a
+// standard http.HandlerFunc. Prefer this form when the router is not in scope.
+func H(fn func(*Writer, *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fn(NewWriter(w, r), r)
+	}
+}
+
 // Method registers a handler using Go 1.22 method+path syntax.
 // Example: r.Method("GET /users/{id}", handler)
 func (r *Router) Method(pattern string, h http.Handler, m ...Middleware) {
-	parts := strings.SplitN(pattern, " ", 2)
-	if len(parts) == 2 {
-		r.Handle(parts[0]+" "+r.prefix+parts[1], h, m...)
-		return
-	}
 	r.Handle(pattern, h, m...)
 }
 
